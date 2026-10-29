@@ -4,6 +4,7 @@ set -eu
 : "${WSPATH:?WSPATH env required}"
 case "$WSPATH" in /*) ;; *) WSPATH="/$WSPATH" ;; esac
 export WSPATH
+export XRAY_LOCATION_ASSET="${XRAY_LOCATION_ASSET:-/usr/local/share/xray}"
 PUBLIC_PORT="${PORT:-8080}"
 XRAY_PORT=8081
 CFG=/tmp/c.json
@@ -41,7 +42,16 @@ while [ $i -lt 40 ]; do
   fi
   i=$((i+1)); sleep 0.25
 done
-wait -n $XR $CV
-kill $XR $CV 2>/dev/null || true
+# Keep listening on PORT even if xray dies (ash: never capture bg PID via $())
+while kill -0 "$CV" 2>/dev/null; do
+  if ! kill -0 "$XR" 2>/dev/null; then
+    echo "xray exited; restarting" >&2
+    /usr/local/bin/xray run -c "$CFG" &
+    XR=$!
+  fi
+  sleep 2
+done
+echo "cover exited" >&2
+kill "$XR" 2>/dev/null || true
 wait || true
 exit 1
